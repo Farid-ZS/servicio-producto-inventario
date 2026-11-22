@@ -1,0 +1,27 @@
+-- productos: productos/migrations/001_init.sql
+exit=0
+-- productos: productos/seeds/001_seed.sql
+exit=0
+-- productos: productos/seeds/001_seed.sql
+exit=0
+-- inventario: inventario/migrations/001_init.sql
+exit=0
+-- inventario: inventario/seeds/001_seed.sql
+exit=0
+-- inventario: inventario/seeds/001_seed.sql
+exit=0
+
+== Conteos db_core
+ categorias | productos | outbox 
+------------+-----------+--------
+          4 |         5 |      5
+(1 row)
+
+== Conteos db_operaciones
+ stock | movimientos | alertas 
+-------+-------------+---------
+     5 |           4 |       1
+(1 row)
+
+ERROR:  movimientos_inventario es append-only
+CONTEXT:  PL/pgSQL function bloquear_mutacion_movimientos() line 1 at RAISE

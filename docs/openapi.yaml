@@ -1,0 +1,437 @@
+openapi: 3.0.3
+info:
+  title: ERP de ventas por WhatsApp - API de Productos e Inventario
+  version: 1.0.0-preliminar
+  description: |
+    Especificación preliminar de los microservicios Gestión de Productos y Gestión de Inventario (módulo 2).
+    Se publica a través del API Gateway bajo `/api/v1`; los servicios internos sirven las mismas rutas sin el prefijo
+    (contratos ADR-019 y ADR-020). Formato común de error: `{ code, message, details, correlationId }` (ADR-022).
+servers:
+  - url: https://api.erp.example/api/v1
+    description: API Gateway (valor de ejemplo, reemplazar por el host real)
+tags:
+  - name: Categorías
+  - name: Productos
+  - name: Disponibilidad
+  - name: Movimientos
+  - name: Reservas
+  - name: Alertas
+security:
+  - bearerAuth: []
+paths:
+  /categories:
+    get:
+      tags: [Categorías]
+      summary: Listar categorías (permiso products:read)
+      operationId: listarCategorias
+      responses:
+        '200': { description: Lista de categorías, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Categoria' } } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+    post:
+      tags: [Categorías]
+      summary: Crear categoría (permiso products:write)
+      operationId: crearCategoria
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CategoriaCrear' } } } }
+      responses:
+        '201': { description: Categoría creada, content: { application/json: { schema: { $ref: '#/components/schemas/Categoria' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /categories/{id}:
+    patch:
+      tags: [Categorías]
+      summary: Modificar nombre, descripción o categoría padre (permiso products:write)
+      operationId: modificarCategoria
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/CategoriaModificar' } } } }
+      responses:
+        '200': { description: Categoría actualizada, content: { application/json: { schema: { $ref: '#/components/schemas/Categoria' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /categories/{id}/deactivate:
+    post:
+      tags: [Categorías]
+      summary: Desactivar categoría; falla si hay productos activos en ella o en sus descendientes (CATEGORY_HAS_ACTIVE_PRODUCTS)
+      operationId: desactivarCategoria
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Categoría desactivada, content: { application/json: { schema: { $ref: '#/components/schemas/Categoria' } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /categories/{id}/activate:
+    post:
+      tags: [Categorías]
+      summary: Activar categoría
+      operationId: activarCategoria
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Categoría activada, content: { application/json: { schema: { $ref: '#/components/schemas/Categoria' } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /products:
+    post:
+      tags: [Productos]
+      summary: Registrar producto; el sistema genera el código único y lo crea ACTIVO (permiso products:write)
+      operationId: registrarProducto
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProductoCrear' } } } }
+      responses:
+        '201': { description: Producto registrado, content: { application/json: { schema: { $ref: '#/components/schemas/Producto' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+    get:
+      tags: [Productos]
+      summary: Buscar y filtrar el catálogo con disponibilidad verificada (permiso products:read)
+      operationId: buscarProductos
+      parameters:
+        - { name: q, in: query, description: Texto parcial de código o nombre, schema: { type: string } }
+        - { name: categoryId, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { type: string, enum: [ACTIVO, INACTIVO] } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        '200': { description: Página de productos con su disponibilidad, content: { application/json: { schema: { $ref: '#/components/schemas/PaginaProductos' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '503': { $ref: '#/components/responses/NoDisponible' }
+        '504': { $ref: '#/components/responses/Timeout' }
+  /products/{id}:
+    get:
+      tags: [Productos]
+      summary: Detalle de producto con disponibilidad verificada (permiso products:read)
+      operationId: detalleProducto
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Producto con disponibilidad, content: { application/json: { schema: { $ref: '#/components/schemas/ProductoConDisponibilidad' } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '503': { $ref: '#/components/responses/NoDisponible' }
+        '504': { $ref: '#/components/responses/Timeout' }
+    patch:
+      tags: [Productos]
+      summary: Modificar datos comerciales; el código es inmutable (permiso products:write)
+      operationId: modificarProducto
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ProductoModificar' } } } }
+      responses:
+        '200': { description: Producto actualizado, content: { application/json: { schema: { $ref: '#/components/schemas/Producto' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /products/{id}/activate:
+    post:
+      tags: [Productos]
+      summary: Activar producto; publica ProductoActivado (permiso products:write)
+      operationId: activarProducto
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Producto activo, content: { application/json: { schema: { $ref: '#/components/schemas/Producto' } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /products/{id}/deactivate:
+    post:
+      tags: [Productos]
+      summary: Desactivar producto para nuevas ventas; publica ProductoDesactivado (permiso products:write)
+      operationId: desactivarProducto
+      parameters: [{ $ref: '#/components/parameters/Id' }]
+      responses:
+        '200': { description: Producto inactivo, content: { application/json: { schema: { $ref: '#/components/schemas/Producto' } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /inventory/availability:
+    get:
+      tags: [Disponibilidad]
+      summary: Disponibilidad por lote (permiso inventory:availability:read)
+      description: disponible = stock físico - stock reservado. Un producto sin stock registrado se devuelve con 0.
+      operationId: consultarDisponibilidad
+      parameters:
+        - { name: productIds, in: query, required: true, description: Hasta 100 UUID separados por coma, schema: { type: string } }
+      responses:
+        '200': { description: Disponibilidad por producto, content: { application/json: { schema: { $ref: '#/components/schemas/Disponibilidad' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /inventory/movements:
+    post:
+      tags: [Movimientos]
+      summary: Registrar entrada, salida o ajuste manual (permiso inventory:write)
+      operationId: registrarMovimiento
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/MovimientoCrear' } } } }
+      responses:
+        '201': { description: Movimiento registrado, content: { application/json: { schema: { $ref: '#/components/schemas/MovimientoRegistrado' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+    get:
+      tags: [Movimientos]
+      summary: Historial filtrado por producto, tipo y rango de fechas (permiso inventory:history)
+      operationId: consultarHistorial
+      parameters:
+        - { name: productId, in: query, required: true, schema: { type: string, format: uuid } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/TipoMovimiento' } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: size, in: query, schema: { type: integer, minimum: 1, maximum: 200, default: 50 } }
+      responses:
+        '200': { description: Página de movimientos, content: { application/json: { schema: { $ref: '#/components/schemas/PaginaMovimientos' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /inventory/stock/{productId}/minimum:
+    put:
+      tags: [Alertas]
+      summary: Configurar el stock mínimo de un producto; null desactiva la alerta (permiso inventory:admin)
+      operationId: configurarStockMinimo
+      parameters: [{ name: productId, in: path, required: true, schema: { type: string, format: uuid } }]
+      requestBody: { required: true, content: { application/json: { schema: { type: object, required: [minimumStock], properties: { minimumStock: { type: integer, minimum: 0, nullable: true } } } } } }
+      responses:
+        '200': { description: Mínimo configurado, content: { application/json: { schema: { type: object, properties: { productId: { type: string, format: uuid }, minimumStock: { type: integer, nullable: true }, availableStock: { type: integer } } } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+  /inventory/alerts:
+    get:
+      tags: [Alertas]
+      summary: Alertas de stock bajo vigentes (permiso inventory:history)
+      operationId: listarAlertas
+      responses:
+        '200': { description: Alertas, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/Alerta' } } } } }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+  /inventory/reservations:
+    post:
+      tags: [Reservas]
+      summary: Reservar stock de todas las líneas del pedido, todo o nada (identidad de servicio con permiso inventory:reservations)
+      operationId: reservarStock
+      parameters: [{ $ref: '#/components/parameters/IdempotencyKey' }]
+      requestBody: { required: true, content: { application/json: { schema: { $ref: '#/components/schemas/ReservaCrear' } } } }
+      responses:
+        '201': { description: Reserva creada (o resultado original ante una repetición idempotente), content: { application/json: { schema: { $ref: '#/components/schemas/Reserva' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /inventory/reservations/{orderId}/release:
+    post:
+      tags: [Reservas]
+      summary: Liberar la reserva por cancelación o vencimiento comercial (idempotente)
+      operationId: liberarReserva
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Reserva liberada, content: { application/json: { schema: { $ref: '#/components/schemas/Reserva' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+  /inventory/reservations/{orderId}/liquidate:
+    post:
+      tags: [Reservas]
+      summary: Convertir la reserva en salida por venta tras el pago aprobado (atómica e idempotente)
+      operationId: liquidarReserva
+      parameters: [{ $ref: '#/components/parameters/OrderId' }, { $ref: '#/components/parameters/IdempotencyKey' }]
+      responses:
+        '200': { description: Reserva liquidada, content: { application/json: { schema: { $ref: '#/components/schemas/Reserva' } } } }
+        '400': { $ref: '#/components/responses/Invalida' }
+        '401': { $ref: '#/components/responses/NoAutenticado' }
+        '403': { $ref: '#/components/responses/SinPermiso' }
+        '404': { $ref: '#/components/responses/NoEncontrado' }
+        '409': { $ref: '#/components/responses/Conflicto' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: JWT, description: 'JWT HS256. Usuarios: { sub, roles }. Servicios: { sub, typ: service, roles }.' }
+  parameters:
+    Id: { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+    OrderId: { name: orderId, in: path, required: true, schema: { type: string, format: uuid } }
+    IdempotencyKey: { name: Idempotency-Key, in: header, required: true, description: 'Entre 8 y 128 caracteres; se conserva 24 h (ADR-023).', schema: { type: string, minLength: 8, maxLength: 128 } }
+  responses:
+    Invalida: { description: INVALID_REQUEST, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NoAutenticado: { description: UNAUTHORIZED por token ausente, inválido o expirado, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    SinPermiso: { description: UNAUTHORIZED por falta de permiso, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NoEncontrado: { description: 'PRODUCT_NOT_FOUND, CATEGORY_NOT_FOUND o RESERVATION_NOT_FOUND', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Conflicto: { description: 'INSUFFICIENT_STOCK, PRODUCT_INACTIVE, RESERVATION_EXPIRED, RESERVED_STOCK_CONFLICT, IDEMPOTENCY_KEY_REUSE, CATEGORY_CYCLE, CATEGORY_HAS_ACTIVE_PRODUCTS o reserva ya existente', content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    NoDisponible: { description: SERVICE_UNAVAILABLE (Inventario no pudo verificar la disponibilidad), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    Timeout: { description: REQUEST_TIMEOUT (Inventario no respondió en 1 s), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+  schemas:
+    Error:
+      type: object
+      required: [code, message, details, correlationId]
+      properties:
+        code: { type: string, enum: [INSUFFICIENT_STOCK, PRODUCT_NOT_FOUND, PRODUCT_INACTIVE, RESERVATION_NOT_FOUND, RESERVATION_EXPIRED, RESERVED_STOCK_CONFLICT, REQUEST_TIMEOUT, SERVICE_UNAVAILABLE, UNAUTHORIZED, INVALID_REQUEST, IDEMPOTENCY_KEY_REUSE, CATEGORY_NOT_FOUND, CATEGORY_CYCLE, CATEGORY_HAS_ACTIVE_PRODUCTS] }
+        message: { type: string }
+        details: { type: object, additionalProperties: true }
+        correlationId: { type: string }
+    Categoria:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        estado: { type: string, enum: [ACTIVA, INACTIVA] }
+        categoriaPadreId: { type: string, format: uuid, nullable: true }
+    CategoriaCrear:
+      type: object
+      required: [nombre]
+      properties:
+        nombre: { type: string, maxLength: 120 }
+        descripcion: { type: string }
+        categoriaPadreId: { type: string, format: uuid }
+    CategoriaModificar:
+      type: object
+      properties:
+        nombre: { type: string, maxLength: 120 }
+        descripcion: { type: string, nullable: true }
+        categoriaPadreId: { type: string, format: uuid, nullable: true }
+    Producto:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        codigo: { type: string, example: PRD-3F9A12C0 }
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        precioVenta: { type: number, minimum: 0 }
+        estado: { type: string, enum: [ACTIVO, INACTIVO] }
+        categoriaId: { type: string, format: uuid }
+        version: { type: integer }
+    ProductoCrear:
+      type: object
+      required: [nombre, categoriaId, precioVenta]
+      properties:
+        nombre: { type: string, maxLength: 200 }
+        descripcion: { type: string, maxLength: 2000 }
+        categoriaId: { type: string, format: uuid }
+        precioVenta: { type: number, minimum: 0 }
+    ProductoModificar:
+      type: object
+      properties:
+        nombre: { type: string }
+        descripcion: { type: string, nullable: true }
+        categoriaId: { type: string, format: uuid }
+        precioVenta: { type: number, minimum: 0 }
+    ProductoConDisponibilidad:
+      allOf:
+        - $ref: '#/components/schemas/Producto'
+        - type: object
+          properties:
+            disponibilidad:
+              type: object
+              properties:
+                verificada: { type: boolean }
+                stockDisponible: { type: integer }
+                motivo: { type: string, enum: [PRODUCTO_INACTIVO] }
+    PaginaProductos:
+      type: object
+      properties:
+        items: { type: array, items: { $ref: '#/components/schemas/ProductoConDisponibilidad' } }
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }
+    Disponibilidad:
+      type: object
+      properties:
+        source: { type: string, enum: [db, cache], description: 'cache = valor informativo con TTL de 30 s' }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: string, format: uuid }
+              physicalStock: { type: integer }
+              reservedStock: { type: integer }
+              availableStock: { type: integer }
+    TipoMovimiento: { type: string, enum: [ENTRADA, SALIDA, AJUSTE, VENTA] }
+    MovimientoCrear:
+      type: object
+      required: [productId, type, quantity, reason]
+      properties:
+        productId: { type: string, format: uuid }
+        type: { type: string, enum: [ENTRADA, SALIDA, AJUSTE], description: VENTA no se registra manualmente }
+        quantity: { type: integer, description: 'Entero positivo; en AJUSTE puede ser negativo (distinto de 0)' }
+        reason: { type: string }
+    MovimientoRegistrado:
+      type: object
+      properties:
+        movementId: { type: string, format: uuid }
+        productId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/TipoMovimiento' }
+        quantity: { type: integer }
+        reason: { type: string }
+        userId: { type: string, format: uuid }
+        date: { type: string, format: date-time }
+        physicalStock: { type: integer }
+        reservedStock: { type: integer }
+        availableStock: { type: integer }
+    PaginaMovimientos:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              movementId: { type: string, format: uuid }
+              productId: { type: string, format: uuid }
+              orderId: { type: string, format: uuid, nullable: true }
+              type: { $ref: '#/components/schemas/TipoMovimiento' }
+              quantity: { type: integer }
+              reason: { type: string, nullable: true }
+              userId: { type: string, format: uuid }
+              date: { type: string, format: date-time }
+        total: { type: integer }
+        page: { type: integer }
+        size: { type: integer }
+    Alerta:
+      type: object
+      properties:
+        productId: { type: string, format: uuid }
+        availableStock: { type: integer }
+        minimumStock: { type: integer }
+        updatedAt: { type: string, format: date-time }
+    ReservaCrear:
+      type: object
+      required: [orderId, items]
+      properties:
+        orderId: { type: string, format: uuid }
+        items:
+          type: array
+          minItems: 1
+          maxItems: 500
+          items:
+            type: object
+            required: [productId, quantity]
+            properties:
+              productId: { type: string, format: uuid }
+              quantity: { type: integer, minimum: 1 }
+        expiresAt: { type: string, format: date-time, description: 'Límite técnico de la reserva; si falta se usa RESERVA_TTL_MINUTOS' }
+    Reserva:
+      type: object
+      properties:
+        orderId: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVA, LIBERADA, EXPIRADA, LIQUIDADA] }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              productId: { type: string, format: uuid }
+              quantity: { type: integer }
+        expiresAt: { type: string, format: date-time }
