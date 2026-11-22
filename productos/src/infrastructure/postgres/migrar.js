@@ -2,7 +2,7 @@ import { readdir, readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../migrations');
+const DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '../../../migrations');
 
 /** Ejecuta las migraciones versionadas (DMD-M1-P1) bajo un advisory lock para que varias instancias no choquen. */
 export async function migrar(pool, log) {

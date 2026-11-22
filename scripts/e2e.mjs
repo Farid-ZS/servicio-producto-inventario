@@ -4,6 +4,8 @@ import { token } from './token.mjs';
 const P = process.env.PRODUCTOS_URL ?? 'http://localhost:3001', I = process.env.INVENTARIO_URL ?? 'http://localhost:3002';
 const SEED = 'a0000000-0000-4000-8000-000000000001';
 let fallos = 0;
+// JSONB de PostgreSQL no conserva el orden de las claves: se compara el contenido, no el orden.
+const estable = (v) => JSON.stringify(v, (_k, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : 1))) : x));
 const ok = (c, m) => { console.log(`${c ? '✔' : '✘'} ${m}`); if (!c) fallos++; };
 async function http(base, metodo, ruta, rol, cuerpo, extra = {}) {
   const r = await fetch(base + ruta, { method: metodo, headers: { 'content-type': 'application/json', authorization: `Bearer ${token(rol)}`, ...extra }, body: cuerpo ? JSON.stringify(cuerpo) : undefined });
@@ -28,7 +30,7 @@ r = await http(I, 'POST', '/inventory/movements', 'ALMACENERO', { productId: SEE
 const pedido = randomUUID(), key = randomUUID(), dto = { orderId: pedido, items: [{ productId: SEED, quantity: 3 }] };
 const h = { 'Idempotency-Key': key };
 r = await http(I, 'POST', '/inventory/reservations', 'SERVICE_PEDIDOS', dto, h); ok(r.status === 201, 'reservar 3 (201)');
-const r2 = await http(I, 'POST', '/inventory/reservations', 'SERVICE_PEDIDOS', dto, h); ok(r2.status === 201 && JSON.stringify(r2.body) === JSON.stringify(r.body), 'reintento con misma Idempotency-Key devuelve el mismo resultado');
+const r2 = await http(I, 'POST', '/inventory/reservations', 'SERVICE_PEDIDOS', dto, h); ok(r2.status === 201 && estable(r2.body) === estable(r.body), 'reintento con misma Idempotency-Key devuelve el mismo resultado');
 const d1 = await disp(); ok(d1.reservedStock === d0.reservedStock + 3, 'stock reservado +3');
 r = await http(I, 'POST', `/inventory/reservations/${pedido}/liquidate`, 'SERVICE_PEDIDOS', null, { 'Idempotency-Key': randomUUID() }); ok(r.status === 200, 'liquidar reserva (VENTA)');
 r = await http(I, 'GET', `/inventory/movements?productId=${SEED}`, 'ADMINISTRADOR'); ok(r.status === 200, 'historial de movimientos');
