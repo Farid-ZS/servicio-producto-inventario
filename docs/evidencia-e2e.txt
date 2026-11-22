@@ -1,0 +1,19 @@
+﻿== Módulo Productos: registrar -> buscar con disponibilidad -> desactivar/activar ==
+✔ crear categoría (201)
+✔ registrar producto, código PRD-0CAFF110
+✔ VENDEDOR no puede registrar (403 antes de la lógica)
+✔ buscar "Smartphone" (200, con disponibilidad de Inventario)
+    {"items":[{"id":"a0000000-0000-4000-8000-000000000005","codigo":"PRD-57687980","nombre":"Smartphone X0 (descontinuado)","descripcion":"Modelo anterior","precioVenta":499,"estado":"INACTIVO","categoriaId":"c0000000-0000-4
+✔ desactivar producto
+✔ activar producto
+== Módulo Inventario: disponibilidad -> entrada -> reserva idempotente -> liquidación -> historial ==
+✔ disponibilidad inicial 78
+✔ ENTRADA +10 (Strategy)
+✔ SALIDA que dejaría stock negativo rechazada
+✔ reservar 3 (201)
+✔ reintento con misma Idempotency-Key devuelve el mismo resultado
+✔ stock reservado +3
+✔ liquidar reserva (VENTA)
+✔ historial de movimientos
+
+TODO OK (0 fallos)
